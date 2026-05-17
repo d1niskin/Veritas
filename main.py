@@ -160,7 +160,7 @@ async def create_ticket(request: Request, category: str = Form(...), description
     return {"ticket_number": ticket_num, "pin_code": pin_code}
 
 @app.post("/api/tickets/check")
-@limiter.limit("5/minute")
+@limiter.limit("40/minute")
 def check_ticket(request: Request, access: TicketAccess, db: Session = Depends(get_db)):
     ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == access.ticket_number).first()
     if not ticket or not security.verify_password(access.pin_code, ticket.hashed_pin):
