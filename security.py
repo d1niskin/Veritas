@@ -2,7 +2,7 @@ import os
 import secrets
 import string
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
+import bcrypt
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,21 +14,26 @@ if not key_from_env:
 ENCRYPTION_KEY = key_from_env.encode('utf-8')
 cipher_suite = Fernet(ENCRYPTION_KEY)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def generate_pin(length=6):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for i in range(length))
 
 def get_password_hash(password: str) -> str:
-    safe_password = password[:72]
-    return pwd_context.hash(safe_password)
+    pwd_bytes = str(password).encode('utf-8')[:72]
+    
+    salt = bcrypt.gensalt()
+    hashed_bytes = bcrypt.hashpw(pwd_bytes, salt)
+    
+    return hashed_bytes.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    safe_password = plain_password[:72]
     try:
-        return pwd_context.verify(safe_password, hashed_password)
-    except ValueError:
+        pwd_bytes = str(plain_password).encode('utf-8')[:72]
+        hashed_bytes = str(hashed_password).encode('utf-8')
+        
+        return bcrypt.checkpw(pwd_bytes, hashed_bytes)
+    except Exception as e:
+        print(f"[Crypto Debug Error] Ошибка верификации: {e}")
         return False
 
 def encrypt_text(text: str) -> str:
