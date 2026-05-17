@@ -58,6 +58,7 @@
         const API_URL = "/api";
         let currentKey = "";
 
+        // ЗАЩИТА ОТ XSS АТАК
         function escapeHTML(str) {
             if (!str) return "";
             return str.replace(/[&<>'"]/g, tag => ({
@@ -86,81 +87,83 @@
                 if (input.value) savedInputs[input.id] = input.value;
             });
 
-            const res = await fetch(`${API_URL}/admin/tickets`, { headers: { 'admin-key': currentKey } });
-            if (!res.ok) {
-                if(res.status === 403) logout();
-                return;
-            }
-            const tickets = await res.json();
-            const tbody = document.getElementById('tickets-table');
-            tbody.innerHTML = "";
+            try {
+                const res = await fetch(`${API_URL}/admin/tickets`, { headers: { 'admin-key': currentKey } });
+                if (!res.ok) {
+                    if(res.status === 403) logout();
+                    return;
+                }
+                const tickets = await res.json();
+                const tbody = document.getElementById('tickets-table');
+                tbody.innerHTML = "";
 
-            tickets.forEach(t => {
-                let statusColor = t.status === "Новое" ? "bg-red-50 text-red-600" : 
-                                  t.status === "В работе" ? "bg-[#ffdd2b]/20 text-[#b28c00]" : 
-                                  "bg-green-50 text-green-600";
-                
-                let mainFileHtml = t.file_url ? `<div class="mt-3"><a href="${t.file_url}" target="_blank" class="text-blue-600 hover:text-blue-800 underline underline-offset-2 text-[13px] font-medium">[Вложение обращения]</a></div>` : '';
-
-                let chatHtml = t.messages.map(m => {
-                    let fileHtml = m.file_url ? `<br><a href="${m.file_url}" target="_blank" class="text-black underline underline-offset-2 text-[13px] mt-1 inline-block font-medium">[Прикрепленный файл]</a>` : '';
-                    let delBtn = m.sender === 'Офицер' ? `<button onclick="deleteMsg(${m.id})" class="text-gray-400 hover:text-red-500 font-medium text-[12px] ml-3 transition-colors">[удалить]</button>` : '';
+                tickets.forEach(t => {
+                    let statusColor = t.status === "Новое" ? "bg-red-50 text-red-600" : 
+                                      t.status === "В работе" ? "bg-[#ffdd2b]/20 text-[#b28c00]" : 
+                                      "bg-green-50 text-green-600";
                     
-                    let bubbleClass = m.sender === 'Офицер' ? 
-                        'bg-gray-100 text-black ml-4 font-normal text-right' : 
-                        'bg-[#ffdd2b] text-black mr-4 font-normal text-left';
+                    let mainFileHtml = t.file_url ? `<div class="mt-3"><a href="${t.file_url}" target="_blank" class="text-blue-600 hover:text-blue-800 underline underline-offset-2 text-[13px] font-medium">[Вложение обращения]</a></div>` : '';
 
-                    return `
-                    <div class="mb-2 text-[14px] p-3.5 rounded-2xl shadow-sm ${bubbleClass}">
-                        <span class="text-[11px] font-semibold text-black/50 block mb-1">${m.sender}</span>
-                        <span class="leading-relaxed whitespace-pre-wrap">${escapeHTML(m.text)}</span> ${fileHtml} ${delBtn}
-                    </div>`;
-                }).join('');
+                    let chatHtml = t.messages.map(m => {
+                        let fileHtml = m.file_url ? `<br><a href="${m.file_url}" target="_blank" class="text-black underline underline-offset-2 text-[13px] mt-1 inline-block font-medium">[Прикрепленный файл]</a>` : '';
+                        let delBtn = m.sender === 'Офицер' ? `<button onclick="deleteMsg(${m.id})" class="text-gray-400 hover:text-red-500 font-medium text-[12px] ml-3 transition-colors">[удалить]</button>` : '';
+                        
+                        let bubbleClass = m.sender === 'Офицер' ? 
+                            'bg-gray-100 text-black ml-4 font-normal text-right' : 
+                            'bg-[#ffdd2b] text-black mr-4 font-normal text-left';
 
-                if (t.messages.length === 0) chatHtml = '<div class="text-[13px] text-gray-400 font-medium text-center py-4">Переписка отсутствует</div>';
+                        return `
+                        <div class="mb-2 text-[14px] p-3.5 rounded-2xl shadow-sm ${bubbleClass}">
+                            <span class="text-[11px] font-semibold text-black/50 block mb-1">${m.sender}</span>
+                            <span class="leading-relaxed whitespace-pre-wrap">${escapeHTML(m.text)}</span> ${fileHtml} ${delBtn}
+                        </div>`;
+                    }).join('');
 
-                tbody.innerHTML += `
-                    <tr class="hover:bg-gray-50/50 border-b border-gray-100 transition-colors">
-                        <td class="p-5 align-top">
-                            <strong class="text-black text-[15px]">${t.ticket_number}</strong>
-                        </td>
-                        <td class="p-5 align-top font-medium text-black">${t.category}</td>
-                        <td class="p-5 align-top">
-                            <div class="text-black mb-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-                                <b class="block mb-2 text-[13px] text-gray-500 font-medium">Текст обращения:</b> 
-                                <span class="leading-relaxed text-[15px] whitespace-pre-wrap">${escapeHTML(t.description)}</span>
-                                ${mainFileHtml}
-                            </div>
-                            
-                            <div class="chat-container max-h-48 overflow-y-auto mb-3 pr-3 custom-scrollbar" id="chat-${t.ticket_number}">${chatHtml}</div>
-                            
-                            <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 mt-2">
-                                <div class="flex items-center gap-3">
-                                    <input type="file" id="reply-file-${t.ticket_number}" class="text-[13px] text-gray-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-black hover:file:bg-gray-200 transition-colors cursor-pointer w-full">
+                    if (t.messages.length === 0) chatHtml = '<div class="text-[13px] text-gray-400 font-medium text-center py-4">Переписка отсутствует</div>';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50/50 border-b border-gray-100 transition-colors">
+                            <td class="p-5 align-top">
+                                <strong class="text-black text-[15px]">${t.ticket_number}</strong>
+                            </td>
+                            <td class="p-5 align-top font-medium text-black">${t.category}</td>
+                            <td class="p-5 align-top">
+                                <div class="text-black mb-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                                    <b class="block mb-2 text-[13px] text-gray-500 font-medium">Текст обращения:</b> 
+                                    <span class="leading-relaxed text-[15px] whitespace-pre-wrap">${escapeHTML(t.description)}</span>
+                                    ${mainFileHtml}
                                 </div>
-                                <div class="flex gap-2">
-                                    <input type="text" id="reply-input-${t.ticket_number}" placeholder="Написать ответ..." class="bg-white border border-gray-200 rounded-2xl p-3 text-[14px] w-full outline-none focus:border-black text-black transition-colors">
-                                    <button onclick="sendReply('${t.ticket_number}')" class="bg-black text-white px-6 py-2 rounded-2xl text-[14px] font-semibold hover:bg-gray-800 transition">Отправить</button>
+                                
+                                <div class="chat-container max-h-48 overflow-y-auto mb-3 pr-3 custom-scrollbar" id="chat-${t.ticket_number}">${chatHtml}</div>
+                                
+                                <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 mt-2">
+                                    <div class="flex items-center gap-3">
+                                        <input type="file" id="reply-file-${t.ticket_number}" class="text-[13px] text-gray-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-black hover:file:bg-gray-200 transition-colors cursor-pointer w-full">
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="reply-input-${t.ticket_number}" placeholder="Написать ответ..." class="bg-white border border-gray-200 rounded-2xl p-3 text-[14px] w-full outline-none focus:border-black text-black transition-colors">
+                                        <button onclick="sendReply('${t.ticket_number}')" class="bg-black text-white px-6 py-2 rounded-2xl text-[14px] font-semibold hover:bg-gray-800 transition">Отправить</button>
+                                    </div>
                                 </div>
-                            </div>
-                        </td>
-                        <td class="p-5 align-top"><span class="px-3 py-1.5 rounded-lg text-[12px] font-semibold ${statusColor}">${t.status}</span></td>
-                        <td class="p-5 align-top">
-                            <select onchange="updateStatus('${t.ticket_number}', this.value)" class="bg-white border border-gray-200 rounded-xl p-2.5 text-[13px] font-medium outline-none focus:border-black w-full text-black transition-colors cursor-pointer appearance-none">
-                                <option value="" disabled selected>Изменить...</option>
-                                <option value="Новое" ${t.status === 'Новое' ? 'selected' : ''}>Новое</option>
-                                <option value="В работе" ${t.status === 'В работе' ? 'selected' : ''}>В работу</option>
-                                <option value="Закрыто" ${t.status === 'Закрыто' ? 'selected' : ''}>Закрыть</option>
-                            </select>
-                        </td>
-                    </tr>
-                `;
-            });
+                            </td>
+                            <td class="p-5 align-top"><span class="px-3 py-1.5 rounded-lg text-[12px] font-semibold ${statusColor}">${t.status}</span></td>
+                            <td class="p-5 align-top">
+                                <select onchange="updateStatus('${t.ticket_number}', this.value)" class="bg-white border border-gray-200 rounded-xl p-2.5 text-[13px] font-medium outline-none focus:border-black w-full text-black transition-colors cursor-pointer appearance-none">
+                                    <option value="" disabled selected>Изменить...</option>
+                                    <option value="Новое" ${t.status === 'Новое' ? 'selected' : ''}>Новое</option>
+                                    <option value="В работе" ${t.status === 'В работе' ? 'selected' : ''}>В работу</option>
+                                    <option value="Закрыто" ${t.status === 'Закрыто' ? 'selected' : ''}>Закрыть</option>
+                                </select>
+                            </td>
+                        </tr>
+                    `;
+                });
 
-            for (let id in savedInputs) {
-                let input = document.getElementById(id);
-                if (input) input.value = savedInputs[id];
-            }
+                for (let id in savedInputs) {
+                    let input = document.getElementById(id);
+                    if (input) input.value = savedInputs[id];
+                }
+            } catch (e) { console.log("Ошибка обновления панели"); }
         }
 
         async function updateStatus(num, status) {
@@ -189,9 +192,8 @@
                 const res = await fetch(`${API_URL}/admin/tickets/${num}/message`, {
                     method: 'POST', headers: { 'admin-key': currentKey }, body: formData
                 });
-                if (!res.ok) {
-                    const data = await res.json();
-                    alert(data.detail || "Ошибка отправки. Проверьте размер файла.");
+                if(!res.ok) {
+                    alert("Ошибка отправки. Возможно, файл не поддерживается или превышен лимит.");
                     input.value = textToClear;
                 }
                 loadTickets();
@@ -209,6 +211,7 @@
 
         function logout() { location.reload(); }
 
+        // Обновление списка обращений офицера раз в 4 секунды
         setInterval(() => {
             if(currentKey && !document.getElementById('dashboard-screen').classList.contains('hidden')) {
                 loadTickets();

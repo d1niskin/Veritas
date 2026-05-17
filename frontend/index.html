@@ -32,7 +32,7 @@
                     <select id="category" required class="w-full border border-gray-200 rounded-2xl p-3.5 text-[15px] focus:border-black focus:ring-0 outline-none bg-white hover:bg-gray-50 transition-colors cursor-pointer appearance-none">
                         <option value="" disabled selected>Выберите из списка...</option>
                         <option value="Коррупция и взятки">Коррупция и взятки</option>
-                        <option value="Академическая этика">Академическая этика (плагиат)</option>
+                        <option value="Академическая ethics">Академическая этика (плагиат)</option>
                         <option value="Харассмент">Харассмент / Давление</option>
                         <option value="Другое">Другое</option>
                     </select>
@@ -118,6 +118,7 @@
         const API_URL = "/api/tickets";
         let currentTicketData = { number: '', pin: '' };
 
+        // ЗАЩИТА ОТ XSS АТАК
         function escapeHTML(str) {
             if (!str) return "";
             return str.replace(/[&<>'"]/g, tag => ({
@@ -149,7 +150,7 @@
                 const response = await fetch(`${API_URL}/create`, { method: 'POST', body: formData });
                 if (!response.ok) {
                     const data = await response.json();
-                    alert(data.detail || "Ошибка. Возможно, файл слишком большой.");
+                    alert(data.detail || "Ошибка создания обращения.");
                     return;
                 }
                 const data = await response.json();
@@ -162,10 +163,11 @@
         }
 
         async function checkTicket(event) {
+            const isPoll = !event; // Проверяем, вызвана функция таймером (false) или кнопкой (true)
             if(event) event.preventDefault();
             
             const errElement = document.getElementById('checkError');
-            errElement.classList.add('hidden-tab');
+            if (!isPoll) errElement.classList.add('hidden-tab');
 
             const ticket_number = document.getElementById('check-number').value || currentTicketData.number;
             const pin_code = document.getElementById('check-pin').value || currentTicketData.pin;
@@ -179,6 +181,8 @@
                 });
 
                 if (!response.ok) {
+                    if (isPoll) return; // Если это фоновый запрос — молча игнорируем лимиты 429
+                    
                     const data = await response.json().catch(() => ({}));
                     errElement.innerText = data.detail || "Неверный номер обращения или PIN-код";
                     errElement.classList.remove('hidden-tab');
@@ -217,8 +221,10 @@
                     }).join('');
                 }
             } catch (error) { 
-                errElement.innerText = "Сервер недоступен. Проверьте подключение.";
-                errElement.classList.remove('hidden-tab');
+                if (!isPoll) {
+                    errElement.innerText = "Сервер недоступен. Проверьте подключение.";
+                    errElement.classList.remove('hidden-tab');
+                }
             }
         }
 
@@ -236,15 +242,15 @@
 
             try {
                 const res = await fetch(`${API_URL}/message`, { method: 'POST', body: formData });
-                if (!res.ok) {
+                if(!res.ok) {
                     const data = await res.json();
-                    alert(data.detail || "Ошибка отправки");
+                    alert(data.detail || "Ошибка отправки файла.");
                     return;
                 }
                 input.value = "";
                 fileInput.value = "";
-                checkTicket();
-            } catch (e) { alert("Ошибка соединения."); }
+                checkTicket(null);
+            } catch (e) { alert("Ошибка отправки."); }
         }
 
         async function deleteUserMessage(id) {
@@ -253,15 +259,16 @@
                 method: 'DELETE', 
                 headers: { 'ticket-number': currentTicketData.number, 'pin-code': currentTicketData.pin } 
             });
-            checkTicket();
+            checkTicket(null);
         }
 
+        // Интеллектуальный фоновый опрос раз в 3 секунды
         setInterval(() => {
             if(currentTicketData.number && !document.getElementById('content-check').classList.contains('hidden-tab')) {
                 const chatDiv = document.getElementById('chat-history');
                 const isScrolledToBottom = chatDiv.scrollHeight - chatDiv.clientHeight <= chatDiv.scrollTop + 10;
                 
-                checkTicket().catch(e => console.log(e)).then(() => {
+                checkTicket(null).catch(e => console.log(e)).then(() => {
                     if (isScrolledToBottom && chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight;
                 });
             }
