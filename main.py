@@ -162,9 +162,21 @@ async def create_ticket(request: Request, category: str = Form(...), description
 @app.post("/api/tickets/check")
 @limiter.limit("40/minute")
 def check_ticket(request: Request, access: TicketAccess, db: Session = Depends(get_db)):
-    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == access.ticket_number).first()
-    if not ticket or not security.verify_password(access.pin_code, ticket.hashed_pin):
+    clean_ticket_num = access.ticket_number.strip().upper().replace(" ", "")
+    clean_pin = access.pin_code.strip().replace(" ", "")
+    
+    print(f"[DEBUG CHECK] Запрос верификации. Папка поиска: '{clean_ticket_num}', Очищенный PIN: '{clean_pin}'")
+    
+    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == clean_ticket_num).first()
+    if not ticket:
+        print(f"[DEBUG CHECK] Тикет {clean_ticket_num} не обнаружен в SQLite!")
         raise HTTPException(status_code=401, detail="Неверные данные")
+        
+    if not security.verify_password(clean_pin, ticket.hashed_pin):
+        print(f"[DEBUG CHECK] Хэши не совпали для тикета {clean_ticket_num}!")
+        raise HTTPException(status_code=401, detail="Неверные данные")
+        
+    print(f"[DEBUG CHECK] Успешный вход в тикет {clean_ticket_num}")
     return {
         "ticket_number": ticket.ticket_number, "status": ticket.status, "category": ticket.category, 
         "description": security.decrypt_text(ticket.encrypted_description),
@@ -174,17 +186,27 @@ def check_ticket(request: Request, access: TicketAccess, db: Session = Depends(g
 @app.post("/api/tickets/message")
 @limiter.limit("10/minute")
 async def user_send_message(request: Request, ticket_number: str = Form(...), pin_code: str = Form(...), message: str = Form(""), file: UploadFile = File(None), db: Session = Depends(get_db)):
-    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == ticket_number).first()
-    if not ticket or not security.verify_password(pin_code, ticket.hashed_pin): raise HTTPException(status_code=401)
-    msg = models.Message(ticket_number=ticket_number, sender="Заявитель", encrypted_text=security.encrypt_text(message), file_url=await save_file(file, "msg"))
+    clean_num = ticket_number.strip().upper().replace(" ", "")
+    clean_pin = pin_code.strip().replace(" ", "")
+    
+    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == clean_num).first()
+    if not ticket or not security.verify_password(clean_pin, ticket.hashed_pin): 
+        raise HTTPException(status_code=401, detail="Неверные данные")
+        
+    msg = models.Message(ticket_number=clean_num, sender="Заявитель", encrypted_text=security.encrypt_text(message), file_url=await save_file(file, "msg"))
     db.add(msg)
     db.commit()
     return {"message": "OK"}
 
 @app.delete("/api/tickets/messages/{message_id}")
 def user_delete_message(message_id: int, ticket_number: str = Header(...), pin_code: str = Header(...), db: Session = Depends(get_db)):
-    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == ticket_number).first()
-    if not ticket or not security.verify_password(pin_code, ticket.hashed_pin): raise HTTPException(status_code=401)
+    clean_num = ticket_number.strip().upper().replace(" ", "")
+    clean_pin = pin_code.strip().replace(" ", "")
+    
+    ticket = db.query(models.Ticket).filter(models.Ticket.ticket_number == clean_num).first()
+    if not ticket or not security.verify_password(clean_pin, ticket.hashed_pin): 
+        raise HTTPException(status_code=401, detail="Неверные данные")
+        
     msg = db.query(models.Message).filter(models.Message.id == message_id, models.Message.sender == "Заявитель").first()
     if msg:
         db.delete(msg)

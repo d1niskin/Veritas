@@ -19,21 +19,19 @@ def generate_pin(length=6):
     return ''.join(secrets.choice(alphabet) for i in range(length))
 
 def get_password_hash(password: str) -> str:
-    pwd_bytes = str(password).encode('utf-8')[:72]
-    
+    clean_pwd = str(password).strip().replace(" ", "")
+    pwd_bytes = clean_pwd.encode('utf-8')[:72]
     salt = bcrypt.gensalt()
-    hashed_bytes = bcrypt.hashpw(pwd_bytes, salt)
-    
-    return hashed_bytes.decode('utf-8')
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        pwd_bytes = str(plain_password).encode('utf-8')[:72]
-        hashed_bytes = str(hashed_password).encode('utf-8')
-        
+        clean_pwd = str(plain_password).strip().replace(" ", "")
+        pwd_bytes = clean_pwd.encode('utf-8')[:72]
+        hashed_bytes = str(hashed_password).strip().encode('utf-8')
         return bcrypt.checkpw(pwd_bytes, hashed_bytes)
     except Exception as e:
-        print(f"[Crypto Debug Error] Ошибка верификации: {e}")
+        print(f"[Crypto System Error] Ошибка bcrypt: {e}")
         return False
 
 def encrypt_text(text: str) -> str:
